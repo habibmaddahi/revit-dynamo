@@ -1,0 +1,326 @@
+{
+  "Uuid": "c9787125-374b-4daf-888a-cf4d2b86c587",
+  "IsCustomNode": false,
+  "Description": "",
+  "Name": "generates filled regions",
+  "ElementResolver": {
+    "ResolutionMap": {}
+  },
+  "Inputs": [],
+  "Outputs": [],
+  "Nodes": [
+    {
+      "ConcreteType": "PythonNodeModels.PythonNode, PythonNodeModels",
+      "NodeType": "PythonScriptNode",
+      "Code": "# Import required Revit API namespaces\r\nimport clr\r\nclr.AddReference(\"RevitAPI\")\r\nclr.AddReference(\"RevitServices\")\r\nimport math\r\nfrom Autodesk.Revit.DB import *\r\nfrom Autodesk.Revit.DB import HorizontalTextAlignment\r\nfrom RevitServices.Persistence import DocumentManager\r\nfrom RevitServices.Transactions import TransactionManager\r\n\r\n# Get the current Revit document\r\ndoc = DocumentManager.Instance.CurrentDBDocument\r\n\r\n# Input parameters - ensure proper type conversion\r\ntry:\r\n    square_size = float(IN[0])  # Convert to float for safety\r\n    gap_size = float(IN[1])     # Convert to float for safety\r\n    drafting_view_name = str(IN[2])  # Convert to string for safety\r\n    text_note_type_name = str(IN[3])  # Name of the text note type to use\r\nexcept (TypeError, ValueError) as e:\r\n    raise ValueError(\"Invalid input parameters. Please ensure:\\n- Square size is a number\\n- Gap size is a number\\n- View name is text\\n- Text note type name is text\")\r\n\r\n# Helper function to find text note type by name\r\ndef get_text_note_type_by_name(doc, type_name):\r\n    text_note_types = FilteredElementCollector(doc).OfClass(TextNoteType).ToElements()\r\n    for text_type in text_note_types:\r\n        if text_type.get_Parameter(BuiltInParameter.SYMBOL_NAME_PARAM).AsString() == type_name:\r\n            return text_type\r\n    return None\r\n\r\n# Helper function to find or create a drafting view\r\ndef get_or_create_drafting_view(doc, view_name):\r\n    # Find existing drafting view by name\r\n    collector = FilteredElementCollector(doc).OfClass(ViewDrafting)\r\n    existing_view = next((view for view in collector if view.Name == view_name), None)\r\n    if existing_view:\r\n        return existing_view\r\n        \r\n    # If not found, create a new drafting view\r\n    view_family_types = FilteredElementCollector(doc).OfClass(ViewFamilyType)\r\n    drafting_view_type = next((vft for vft in view_family_types if vft.ViewFamily == ViewFamily.Drafting), None)\r\n    \r\n    if not drafting_view_type:\r\n        raise Exception(\"No drafting view family type found in the project.\")\r\n        \r\n    new_view = ViewDrafting.Create(doc, drafting_view_type.Id)\r\n    new_view.Name = view_name\r\n    return new_view\r\n\r\n# Helper function to create a filled region\r\ndef create_filled_region(doc, view, rect, filled_region_type):\r\n    curve_loop = CurveLoop()\r\n    for line in rect:\r\n        curve_loop.Append(line)\r\n    return FilledRegion.Create(doc, filled_region_type.Id, view.Id, [curve_loop])\r\n\r\ntry:\r\n    # Start the transaction\r\n    TransactionManager.Instance.EnsureInTransaction(doc)\r\n\r\n    # Get or create the drafting view\r\n    drafting_view = get_or_create_drafting_view(doc, drafting_view_name)\r\n    if not drafting_view:\r\n        raise Exception(\"Failed to create drafting view.\")\r\n\r\n    # Get all available filled region types\r\n    filled_region_types = list(FilteredElementCollector(doc).OfClass(FilledRegionType).ToElements())\r\n    if not filled_region_types:\r\n        raise Exception(\"No filled region types found in the project.\")\r\n\r\n    # Get the specified text note type\r\n    text_note_type = get_text_note_type_by_name(doc, text_note_type_name)\r\n    if not text_note_type:\r\n        available_types = [t.get_Parameter(BuiltInParameter.SYMBOL_NAME_PARAM).AsString() \r\n                         for t in FilteredElementCollector(doc).OfClass(TextNoteType).ToElements()]\r\n        raise Exception(f\"Text note type '{text_note_type_name}' not found. Available types: {', '.join(available_types)}\")\r\n\r\n    # Calculate grid dimensions based on the number of filled region types\r\n    total_types = len(filled_region_types)\r\n    n_cols = int(math.ceil(math.sqrt(total_types)))\r\n    n_rows = int(math.ceil(float(total_types) / n_cols))\r\n\r\n    # Generate the grid of squares\r\n    squares = []\r\n    text_notes = []\r\n    \r\n    for i in range(n_rows):\r\n        for j in range(n_cols):\r\n            index = i * n_cols + j\r\n            if index >= total_types:\r\n                break\r\n                \r\n            # Calculate square position\r\n            x = j * (square_size + gap_size)\r\n            y = i * (square_size + gap_size)\r\n            \r\n            # Create square geometry\r\n            points = [\r\n                XYZ(x, y, 0),\r\n                XYZ(x + square_size, y, 0),\r\n                XYZ(x + square_size, y + square_size, 0),\r\n                XYZ(x, y + square_size, 0)\r\n            ]\r\n            \r\n            # Create lines for the square\r\n            rect = [Line.CreateBound(points[k], points[(k+1)%4]) for k in range(4)]\r\n            \r\n            # Create filled region\r\n            filled_region_type = filled_region_types[index]\r\n            filled_region = create_filled_region(doc, drafting_view, rect, filled_region_type)\r\n            squares.append(filled_region)\r\n            \r\n            # Get pattern information\r\n            filled_region_type_name = str(filled_region_type.get_Parameter(BuiltInParameter.SYMBOL_NAME_PARAM).AsString())\r\n            \r\n            # Get fill pattern name safely\r\n            fill_pattern_id = filled_region_type.ForegroundPatternId\r\n            fill_pattern_element = doc.GetElement(fill_pattern_id)\r\n            fill_pattern_name = \"No Pattern\"\r\n            if fill_pattern_element and hasattr(fill_pattern_element, \"Name\"):\r\n                fill_pattern_name = str(fill_pattern_element.Name)\r\n            \r\n            # Create text note\r\n            text_content = \"{}\\nPattern: {}\".format(filled_region_type_name, fill_pattern_name)\r\n            text_point = XYZ(x + square_size / 2, y - gap_size / 2, 0)\r\n            \r\n            # Create text note with options\r\n            text_note_opts = TextNoteOptions(text_note_type.Id)\r\n            text_note_opts.HorizontalAlignment = HorizontalTextAlignment.Center\r\n            \r\n            text_note = TextNote.Create(doc, drafting_view.Id, text_point, text_content, text_note_opts)\r\n            text_notes.append(text_note)\r\n\r\n    # Commit the transaction\r\n    TransactionManager.Instance.TransactionTaskDone()\r\n    OUT = (squares, text_notes)\r\n\r\nexcept Exception as e:\r\n    # Ensure transaction is closed even if there's an error\r\n    if TransactionManager.Instance.CurrentTransaction:\r\n        TransactionManager.Instance.TransactionTaskDone()\r\n    # Re-raise the exception with more context\r\n    raise Exception(\"Error in pattern grid creation: {}\".format(str(e)))",
+      "Engine": "CPython3",
+      "EngineName": "CPython3",
+      "VariableInputPorts": true,
+      "Id": "f34a189381cb4668b44a12f43b1f9ffe",
+      "Inputs": [
+        {
+          "Id": "a6975b005e1e4e2483ab0487eca1c0c8",
+          "Name": "IN[0]",
+          "Description": "Input #0",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        },
+        {
+          "Id": "511fac8b12024b298c2fd5f57d936665",
+          "Name": "IN[1]",
+          "Description": "Input #1",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        },
+        {
+          "Id": "4fcbc9441eac46f3885edc75eafcbc0a",
+          "Name": "IN[2]",
+          "Description": "Input #2",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        },
+        {
+          "Id": "325a3ef78b2c48119757346a6d7de15c",
+          "Name": "IN[3]",
+          "Description": "Input #3",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Outputs": [
+        {
+          "Id": "16f7efc6c6424469b928dc9ae129fca3",
+          "Name": "OUT",
+          "Description": "Result of the python script",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "Runs an embedded Python script."
+    },
+    {
+      "ConcreteType": "CoreNodeModels.Input.IntegerSlider, CoreNodeModels",
+      "NodeType": "NumberInputNode",
+      "NumberType": "Integer",
+      "InputValue": 15,
+      "MaximumValue": 100,
+      "MinimumValue": 0,
+      "StepValue": 1,
+      "Id": "881c7074bc9c4a84a24c45f34f5ee3ee",
+      "Inputs": [],
+      "Outputs": [
+        {
+          "Id": "a7321731ef90496bbc6fb2e13acb980b",
+          "Name": "",
+          "Description": "Int64",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "A slider that produces integer values."
+    },
+    {
+      "ConcreteType": "CoreNodeModels.Input.DoubleSlider, CoreNodeModels",
+      "NodeType": "NumberInputNode",
+      "NumberType": "Double",
+      "MaximumValue": 100.0,
+      "MinimumValue": 0.0,
+      "StepValue": 0.1,
+      "InputValue": 0.5,
+      "Id": "b6b3e3384520493d9218b2d554d4c589",
+      "Inputs": [],
+      "Outputs": [
+        {
+          "Id": "128cc4c02ece4fca8d2ae2e72ecd7d6b",
+          "Name": "",
+          "Description": "Double",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "A slider that produces numeric values."
+    },
+    {
+      "ConcreteType": "CoreNodeModels.Input.StringInput, CoreNodeModels",
+      "NodeType": "StringInputNode",
+      "InputValue": "Drafting 1",
+      "Id": "2537849308b548248439edced84f8792",
+      "Inputs": [],
+      "Outputs": [
+        {
+          "Id": "007fe6ef90b843a8a5544f587b451fa4",
+          "Name": "",
+          "Description": "String",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "Creates a string."
+    },
+    {
+      "ConcreteType": "CoreNodeModels.Input.DoubleSlider, CoreNodeModels",
+      "NodeType": "NumberInputNode",
+      "NumberType": "Double",
+      "MaximumValue": 100.0,
+      "MinimumValue": 0.0,
+      "StepValue": 0.1,
+      "InputValue": 1.0,
+      "Id": "532d6a1019304993a12b24ff9b8505af",
+      "Inputs": [],
+      "Outputs": [
+        {
+          "Id": "bafb526e8f65403f8c2bcd587a5cbf99",
+          "Name": "",
+          "Description": "Double",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "A slider that produces numeric values."
+    },
+    {
+      "ConcreteType": "CoreNodeModels.Input.StringInput, CoreNodeModels",
+      "NodeType": "StringInputNode",
+      "InputValue": "Arial - 1/8\"",
+      "Id": "ffe3b7da8d6d4076bd0aa0cabb147f02",
+      "Inputs": [],
+      "Outputs": [
+        {
+          "Id": "557e9a00cb0e416e9de5eb4ac70a31ac",
+          "Name": "",
+          "Description": "String",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "Creates a string."
+    }
+  ],
+  "Connectors": [
+    {
+      "Start": "128cc4c02ece4fca8d2ae2e72ecd7d6b",
+      "End": "511fac8b12024b298c2fd5f57d936665",
+      "Id": "fef0f1d3820d4f8f84e2ba1160998490",
+      "IsHidden": "False"
+    },
+    {
+      "Start": "007fe6ef90b843a8a5544f587b451fa4",
+      "End": "4fcbc9441eac46f3885edc75eafcbc0a",
+      "Id": "be6605b637264c289535db599a759ef5",
+      "IsHidden": "False"
+    },
+    {
+      "Start": "bafb526e8f65403f8c2bcd587a5cbf99",
+      "End": "a6975b005e1e4e2483ab0487eca1c0c8",
+      "Id": "aa2e2c3dbf964977895c6ac450ea490a",
+      "IsHidden": "False"
+    },
+    {
+      "Start": "557e9a00cb0e416e9de5eb4ac70a31ac",
+      "End": "325a3ef78b2c48119757346a6d7de15c",
+      "Id": "4e33a0cde77e4888bec430c0fad35988",
+      "IsHidden": "False"
+    }
+  ],
+  "Dependencies": [],
+  "NodeLibraryDependencies": [],
+  "Thumbnail": "",
+  "GraphDocumentationURL": null,
+  "ExtensionWorkspaceData": [
+    {
+      "ExtensionGuid": "28992e1d-abb9-417f-8b1b-05e053bee670",
+      "Name": "Properties",
+      "Version": "2.16",
+      "Data": {}
+    },
+    {
+      "ExtensionGuid": "DFBD9CC0-DB40-457A-939E-8C8555555A9D",
+      "Name": "Generative Design",
+      "Version": "3.0",
+      "Data": {}
+    }
+  ],
+  "Author": "",
+  "Linting": {
+    "activeLinter": "None",
+    "activeLinterId": "7b75fb44-43fd-4631-a878-29f4d5d8399a",
+    "warningCount": 0,
+    "errorCount": 0
+  },
+  "Bindings": [],
+  "View": {
+    "Dynamo": {
+      "ScaleFactor": 1.0,
+      "HasRunWithoutCrash": true,
+      "IsVisibleInDynamoLibrary": true,
+      "Version": "2.16.2.5624",
+      "RunType": "Manual",
+      "RunPeriod": "1000"
+    },
+    "Camera": {
+      "Name": "Background Preview",
+      "EyeX": -17.0,
+      "EyeY": 24.0,
+      "EyeZ": 50.0,
+      "LookX": 12.0,
+      "LookY": -13.0,
+      "LookZ": -58.0,
+      "UpX": 0.0,
+      "UpY": 1.0,
+      "UpZ": 0.0
+    },
+    "ConnectorPins": [],
+    "NodeViews": [
+      {
+        "Name": "Python Script",
+        "ShowGeometry": true,
+        "Id": "f34a189381cb4668b44a12f43b1f9ffe",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Excluded": false,
+        "X": 1116.2344213649851,
+        "Y": 643.61721068249255
+      },
+      {
+        "Name": "Number of squares along one axis",
+        "ShowGeometry": true,
+        "Id": "881c7074bc9c4a84a24c45f34f5ee3ee",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Excluded": false,
+        "X": 514.0,
+        "Y": 438.0
+      },
+      {
+        "Name": "Gap between squares in feet",
+        "ShowGeometry": true,
+        "Id": "b6b3e3384520493d9218b2d554d4c589",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Excluded": false,
+        "X": 565.49554896142422,
+        "Y": 732.05637982195844
+      },
+      {
+        "Name": "String",
+        "ShowGeometry": true,
+        "Id": "2537849308b548248439edced84f8792",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Excluded": false,
+        "X": 578.29970326409489,
+        "Y": 899.43916913946578
+      },
+      {
+        "Name": "Side length of each square in feet",
+        "ShowGeometry": true,
+        "Id": "532d6a1019304993a12b24ff9b8505af",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Excluded": false,
+        "X": 549.49554896142433,
+        "Y": 583.74777448071211
+      },
+      {
+        "Name": "String",
+        "ShowGeometry": true,
+        "Id": "ffe3b7da8d6d4076bd0aa0cabb147f02",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Excluded": false,
+        "X": 582.01899540040893,
+        "Y": 1074.8552619392892
+      }
+    ],
+    "Annotations": [],
+    "X": -368.1388720267488,
+    "Y": -366.73235209732582,
+    "Zoom": 0.86797750764901582
+  }
+}

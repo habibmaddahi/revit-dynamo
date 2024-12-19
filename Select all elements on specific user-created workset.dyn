@@ -1,0 +1,266 @@
+{
+  "Uuid": "865608b8-db75-4cba-8b88-975a6f5b7b9c",
+  "IsCustomNode": false,
+  "Description": "",
+  "Name": "Select all elements on specific user-created workset",
+  "ElementResolver": {
+    "ResolutionMap": {}
+  },
+  "Inputs": [],
+  "Outputs": [],
+  "Nodes": [
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Function, DynamoCore",
+      "FunctionSignature": "77c1faef-c506-4055-982c-97d66b8deec3",
+      "FunctionType": "Graph",
+      "NodeType": "FunctionNode",
+      "Id": "f5632dff5c7c4d548c1721bd04d496fc",
+      "Inputs": [
+        {
+          "Id": "e77cd1f3573a428dbebf634ee6f651b2",
+          "Name": "workset",
+          "Description": "Workset Name or Autodesk.Revit.DB.Workset\n\nvar[]..[]",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Outputs": [
+        {
+          "Id": "daa685ebf30d41b68af7f342c75b1134",
+          "Name": "Element",
+          "Description": "return value",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Auto",
+      "Description": "Collect all elements at a given workset.\r\nWorks with a workset name or with a Autodesk.Revit.DB.Workset."
+    },
+    {
+      "ConcreteType": "PythonNodeModels.PythonNode, PythonNodeModels",
+      "NodeType": "PythonScriptNode",
+      "Code": "# Load the Python Standard and DesignScript Libraries\r\nimport sys\r\nimport clr\r\n\r\nclr.AddReference('ProtoGeometry')\r\nfrom Autodesk.DesignScript.Geometry import *\r\n\r\n# Add reference to RevitAPI and RevitServices\r\nclr.AddReference('RevitAPI')\r\nclr.AddReference('RevitServices')\r\n\r\n# Import necessary classes\r\nfrom Autodesk.Revit.DB import FilteredWorksetCollector, WorksetKind\r\nfrom RevitServices.Persistence import DocumentManager\r\n\r\n# Get the current Revit document\r\ndoc = DocumentManager.Instance.CurrentDBDocument\r\n\r\n# Create a FilteredWorksetCollector\r\nworksetCollector = FilteredWorksetCollector(doc)\r\n\r\n# Get all worksets\r\nallWorksets = worksetCollector.ToWorksets()\r\n\r\n# Filter to get only user-created worksets\r\nuserWorksets = [w for w in allWorksets if w.Kind == WorksetKind.UserWorkset]\r\n\r\n# Extract workset names\r\nworksetNames = [w.Name for w in userWorksets]\r\n\r\n# Assign your output to the OUT variable.\r\nOUT = worksetNames",
+      "Engine": "CPython3",
+      "EngineName": "CPython3",
+      "VariableInputPorts": true,
+      "Id": "03b5577115b144dbb1caa4004122b112",
+      "Inputs": [
+        {
+          "Id": "b1f880ae4f3c451abf196db92f3c223f",
+          "Name": "IN[0]",
+          "Description": "Input #0",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Outputs": [
+        {
+          "Id": "da7d2d21e7a14a709001be45e433c126",
+          "Name": "OUT",
+          "Description": "Result of the python script",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "Runs an embedded Python script."
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.ZeroTouch.DSFunction, DynamoCore",
+      "NodeType": "FunctionNode",
+      "FunctionSignature": "DSCore.List.GetItemAtIndex@var[]..[],int",
+      "Id": "8579034979d34bb4afd60d4715d45f0f",
+      "Inputs": [
+        {
+          "Id": "6dc6b1dc7beb48e5aea6a2bb626f094c",
+          "Name": "list",
+          "Description": "List to fetch an item from.\n\nvar[]..[]",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        },
+        {
+          "Id": "41ee90e6c37949f18f8ead8c131276cc",
+          "Name": "index",
+          "Description": "Index of the item to be fetched.\n\nint",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Outputs": [
+        {
+          "Id": "8365ccb2530644ff940a26e5e3711b21",
+          "Name": "item",
+          "Description": "Item in the list at the given index.",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Auto",
+      "Description": "Returns an item from the given list that's located at the specified index.\n\nList.GetItemAtIndex (list: var[]..[], index: int): var[]..[]"
+    },
+    {
+      "ConcreteType": "CoreNodeModels.Input.DoubleSlider, CoreNodeModels",
+      "NodeType": "NumberInputNode",
+      "NumberType": "Double",
+      "MaximumValue": 100.0,
+      "MinimumValue": 0.0,
+      "StepValue": 0.1,
+      "InputValue": 10.0,
+      "Id": "470d670a7bdc4160be6c5cc9a750d48e",
+      "Inputs": [],
+      "Outputs": [
+        {
+          "Id": "ccc73c7661984e51b62038e4ddbd6cb6",
+          "Name": "",
+          "Description": "Double",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "A slider that produces numeric values."
+    }
+  ],
+  "Connectors": [
+    {
+      "Start": "da7d2d21e7a14a709001be45e433c126",
+      "End": "6dc6b1dc7beb48e5aea6a2bb626f094c",
+      "Id": "ec8ffa1def934ea2b4a81b142ef71fdc",
+      "IsHidden": "False"
+    },
+    {
+      "Start": "8365ccb2530644ff940a26e5e3711b21",
+      "End": "e77cd1f3573a428dbebf634ee6f651b2",
+      "Id": "d6c90f3f26ed409a89730a843aaa4034",
+      "IsHidden": "False"
+    },
+    {
+      "Start": "ccc73c7661984e51b62038e4ddbd6cb6",
+      "End": "41ee90e6c37949f18f8ead8c131276cc",
+      "Id": "b9248de03d1d46c0aa1202d788f5ca72",
+      "IsHidden": "False"
+    }
+  ],
+  "Dependencies": [
+    "77c1faef-c506-4055-982c-97d66b8deec3"
+  ],
+  "NodeLibraryDependencies": [
+    {
+      "Name": "Genius Loci",
+      "Version": "2024.5.29",
+      "ReferenceType": "Package",
+      "Nodes": [
+        "f5632dff5c7c4d548c1721bd04d496fc"
+      ]
+    }
+  ],
+  "Thumbnail": "",
+  "GraphDocumentationURL": null,
+  "ExtensionWorkspaceData": [
+    {
+      "ExtensionGuid": "28992e1d-abb9-417f-8b1b-05e053bee670",
+      "Name": "Properties",
+      "Version": "2.16",
+      "Data": {}
+    },
+    {
+      "ExtensionGuid": "DFBD9CC0-DB40-457A-939E-8C8555555A9D",
+      "Name": "Generative Design",
+      "Version": "3.0",
+      "Data": {}
+    }
+  ],
+  "Author": "",
+  "Linting": {
+    "activeLinter": "None",
+    "activeLinterId": "7b75fb44-43fd-4631-a878-29f4d5d8399a",
+    "warningCount": 0,
+    "errorCount": 0
+  },
+  "Bindings": [],
+  "View": {
+    "Dynamo": {
+      "ScaleFactor": 1.0,
+      "HasRunWithoutCrash": true,
+      "IsVisibleInDynamoLibrary": true,
+      "Version": "2.16.2.5624",
+      "RunType": "Automatic",
+      "RunPeriod": "1000"
+    },
+    "Camera": {
+      "Name": "Background Preview",
+      "EyeX": -17.0,
+      "EyeY": 24.0,
+      "EyeZ": 50.0,
+      "LookX": 12.0,
+      "LookY": -13.0,
+      "LookZ": -58.0,
+      "UpX": 0.0,
+      "UpY": 1.0,
+      "UpZ": 0.0
+    },
+    "ConnectorPins": [],
+    "NodeViews": [
+      {
+        "Name": "All Elements at Workset",
+        "ShowGeometry": true,
+        "Id": "f5632dff5c7c4d548c1721bd04d496fc",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Excluded": false,
+        "X": 968.9218305627171,
+        "Y": 997.36674137011516
+      },
+      {
+        "Name": "User Created workset",
+        "ShowGeometry": true,
+        "Id": "03b5577115b144dbb1caa4004122b112",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Excluded": false,
+        "X": 321.22540718878628,
+        "Y": 997.46134513736956
+      },
+      {
+        "Name": "List.GetItemAtIndex",
+        "ShowGeometry": true,
+        "Id": "8579034979d34bb4afd60d4715d45f0f",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Excluded": false,
+        "X": 654.49460090400567,
+        "Y": 991.50126695108634
+      },
+      {
+        "Name": "Number Slider",
+        "ShowGeometry": true,
+        "Id": "470d670a7bdc4160be6c5cc9a750d48e",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Excluded": false,
+        "X": 464.74395131619309,
+        "Y": 1471.0062868554232
+      }
+    ],
+    "Annotations": [],
+    "X": -135.48679487637639,
+    "Y": -529.34221425603914,
+    "Zoom": 0.77997097939582416
+  }
+}
